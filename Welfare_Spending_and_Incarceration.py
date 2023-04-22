@@ -8,6 +8,10 @@ Created on Tue Apr 18 15:44:13 2023
 import pandas as pd
 import numpy as np
 import os
+import matplotlib as plt
+import seaborn as sns
+import statsmodels.formula.api as smf
+import statsmodels.api as sm
 
 os.chdir("C:/Users/rmjol/OneDrive/Documents/Python/Open Data in Python/Data")
 
@@ -33,6 +37,19 @@ state_num = np.arange(1,52)
 state_num = pd.Series(state_num)
 state_num = state_num.drop(labels = 8)
 state_num = state_num.reset_index(drop=True)
+
+pop_years = {}
+
+for col in state_population.columns[3:12,]:
+    colname = f"{col}"
+    year = state_population[col].iloc[8:59]
+    year = year.drop(labels = 16)
+    year = year.reset_index(drop = True)
+    pop_years[colname] = year
+
+pop_years = pd.DataFrame(pop_years)
+pop_years.columns = ["2010", "2011", "2012", "2013", "2014", "2015", "2016", "2017", "2018"]
+pop_long = pd.melt(pop_years, id_vars=None, value_vars=None, var_name="years", value_name="population")
 
 pop_2018 = state_population.iloc[8:59, 11]
 pop_2018 = pop_2018.drop(labels = 16)
@@ -118,3 +135,20 @@ calc_data["justice_rate"] = ((clean_data["prisoners"] +
 calc_data["welfare_perc"] = (clean_data["welfare_exp"] / clean_data["total_exp"]) * 100
 calc_data["welfare_povcap"] = clean_data["welfare_exp"] / ((clean_data["poverty_rate"] / 100) * clean_data["population"])
 
+###### Visuals #######
+
+sns.lmplot(data = calc_data, x = "welfare_perc", y = "poverty_rate")
+sns.lmplot(data = calc_data, x = "welfare_povcap", y = "poverty_rate")
+sns.lmplot(data = calc_data, x = "welfare_perc", y = "justice_rate")
+sns.lmplot(data = calc_data, x = "welfare_povcap", y = "justice_rate")
+sns.lmplot(data = calc_data, x = "welfare_perc", y = "unemploy_rate")
+sns.lmplot(data = calc_data, x = "welfare_povcap", y = "unemploy_rate")
+
+##### Regressions ######3
+
+drop_ga = calc_data.drop(labels = 9)
+temp_model = smf.ols("justice_rate ~ welfare_povcap", data = drop_ga)
+results = temp_model.fit()
+print(results.summary())
+
+sns.lmplot(data = drop_ga, x = "welfare_povcap", y = "justice_rate")
