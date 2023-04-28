@@ -8,17 +8,29 @@ Created on Tue Apr 18 15:44:13 2023
 import pandas as pd
 import numpy as np
 import os
+import matplotlib as plt
+import seaborn as sns
+import statsmodels.formula.api as smf
+import statsmodels.api as sm
 
-os.chdir("C:/Users/rmjol/OneDrive/Documents/Python/Open Data in Python/Data")
+os.chdir("C:/Users/rmjol/OneDrive/Documents/Python/Projects/Welfare_Spending_and_Incarceration/Data")
 
+#### File Reading ####
 state_population = pd.read_excel("nst-est2019-01.xlsx")
 state_spending = pd.read_excel("ASFIN FY2018_2017.xlsx")
-state_stats = pd.read_csv("ACSDP1Y2018.DP03-2023-04-19T154739.csv")
+
+file_pattern = "ACSDP1Y{}.csv"
+file_names = [file_pattern.format(i) for i in range(2010, 2019)]
+state_stats = [pd.read_csv(file) for file in file_names]
+for i, stats in enumerate(state_stats):
+    globals()[f"stats_{i+2010}"] = stats
+
 state_prisoners = pd.read_excel("data.xlsx")
 state_probationers = pd.read_csv("38057-0001-Data.tsv",sep="\t")
 state_parolees = pd.read_csv("38058-0001-Data.tsv", sep ="\t")
 state_jail = pd.read_csv("37392-0001-Data.tsv", sep="\t")
 
+#### Single year data cleaning (2018) ####
 state_name = state_spending.iloc[0]
 state_name = state_name.reset_index()
 state_name = state_name.iloc[2::3, :]
@@ -50,7 +62,7 @@ welfare_exp = welfare_exp.iloc[2::3, :]
 welfare_exp = welfare_exp.iloc[1:152, 1]
 welfare_exp = welfare_exp.reset_index(drop=True)
 
-poverty_percent = state_stats.iloc[135]
+poverty_percent = stats_2018.iloc[135]
 poverty_percent = poverty_percent.reset_index()
 poverty_percent = poverty_percent.iloc[2::2, :]
 poverty_percent = poverty_percent.drop(labels = [18, 104])
@@ -59,7 +71,7 @@ poverty_percent = poverty_percent.reset_index(drop=True)
 poverty_percent = poverty_percent.str.replace(r'\D', '').astype(float)
 poverty_percent = poverty_percent / 10
 
-unemploy_rate = state_stats.iloc[5]
+unemploy_rate = stats_2018.iloc[5]
 unemploy_rate = unemploy_rate.reset_index()
 unemploy_rate = unemploy_rate.iloc[2::2, :]
 unemploy_rate = unemploy_rate.drop(labels = [18, 104])
@@ -67,7 +79,6 @@ unemploy_rate = unemploy_rate.iloc[:, 1]
 unemploy_rate = unemploy_rate.reset_index(drop=True)
 unemploy_rate = unemploy_rate.str.replace(r'\D', '').astype(float)
 unemploy_rate = unemploy_rate / 10
-
 
 prisoners = state_prisoners.iloc[0:51, :]
 prisoners.columns = prisoners.iloc[0]
@@ -91,7 +102,6 @@ parolees = parolees.reset_index(drop=True)
 probationers = state_probationers.iloc[1:52,24]
 probationers = probationers.drop(labels = 9)
 probationers = probationers.reset_index(drop=True)
-
 
 clean_data = {"state_name":state_name, 
       "state_initial":state_initial, 
@@ -118,3 +128,50 @@ calc_data["justice_rate"] = ((clean_data["prisoners"] +
 calc_data["welfare_perc"] = (clean_data["welfare_exp"] / clean_data["total_exp"]) * 100
 calc_data["welfare_povcap"] = clean_data["welfare_exp"] / ((clean_data["poverty_rate"] / 100) * clean_data["population"])
 
+###### 2018 Visuals #######
+
+sns.lmplot(data = calc_data, x = "welfare_perc", y = "poverty_rate")
+sns.lmplot(data = calc_data, x = "welfare_povcap", y = "poverty_rate")
+sns.lmplot(data = calc_data, x = "welfare_perc", y = "justice_rate")
+sns.lmplot(data = calc_data, x = "welfare_povcap", y = "justice_rate")
+sns.lmplot(data = calc_data, x = "welfare_perc", y = "unemploy_rate")
+sns.lmplot(data = calc_data, x = "welfare_povcap", y = "unemploy_rate")
+
+##### 2018 Regressions ######3
+
+drop_ga = calc_data.drop(labels = 9)
+temp_model = smf.ols("justice_rate ~ welfare_povcap", data = drop_ga)
+results = temp_model.fit()
+print(results.summary())
+
+sns.lmplot(data = drop_ga, x = "welfare_povcap", y = "justice_rate")
+
+#### 2010 - 2018 data cleaning ####
+state_name_rep = list(state_name) * 9
+state_initial_rep = list(state_initial) * 9
+state_num_rep = list(state_num) * 9
+
+pop_years = state_population.iloc[8:59,3:12]
+pop_years.columns = ["2010", "2011", "2012", "2013", "2014", "2015", "2016", "2017", "2018"]
+pop_years = pop_years.drop(labels = 16)
+pop_years = pop_years.reset_index(drop = True)
+pop_long = pd.melt(pop_years, id_vars=None, value_vars=None, var_name="years", value_name="population")
+year = pop_long.iloc[:,0]
+population = pop_long.iloc[:,1]
+
+clean_data2 = {"state_name":state_name_rep, 
+      "state_initial":state_initial_rep, 
+      "state_num":state_num_rep,
+      "year":year,
+      "population":population, 
+      }
+
+clean_data2 = pd.DataFrame(clean_data2)
+      "total_exp": total_exp,
+      "welfare_exp": welfare_exp,
+      "poverty_rate":poverty_percent,
+      "unemploy_rate": unemploy_rate,
+      "prisoners":prisoners,
+      "parolees":parolees,
+      "probationers":probationers
+      
