@@ -302,6 +302,8 @@ clean_data2 = pd.DataFrame(clean_data2)
 clean_data2 = pd.merge(clean_data2, jail_long, how="left", left_on=["state_num","year"], right_on=["STATE","years"])
 clean_data2 = clean_data2.drop(columns= ["STATE", "years"])
 clean_data2 = clean_data2.fillna(0)
+clean_data2 = clean_data2.replace({-9:np.nan})
+clean_data2 = clean_data2.dropna()
 
 calc_data = clean_data2.loc[:, ["state_name", "state_initial", "state_num", "year", "poverty_rate", "unemploy_rate"]]
 calc_data["justice_rate"] = ((clean_data2["prisoners"] + 
@@ -312,32 +314,27 @@ calc_data["violent_rate"] = (clean_data2["violent_crime"] / clean_data2["populat
 calc_data["property_rate"] = (clean_data2["property_crime"] / clean_data2["population"]) * 100
 calc_data["welfare_povcap"] = clean_data2["welfare_exp"] / ((clean_data2["poverty_rate"] / 100) * clean_data2["population"])
 calc_data["welfare_percap"] = clean_data2["welfare_exp"] / clean_data2["population"]
-GAMI_drop = calc_data[calc_data["state_num"] != 11]
-GAMI_drop = GAMI_drop[GAMI_drop["state_num"] != 23]
+
 ###### Visuals #######
 
 sns.lmplot(data = calc_data, x = "welfare_povcap", y = "poverty_rate")
-sns.lmplot(data = GAMI_drop, x = "welfare_povcap", y = "justice_rate")
 sns.lmplot(data = calc_data, x = "welfare_povcap", y = "unemploy_rate")
 sns.lmplot(data = calc_data, x = "welfare_povcap", y = "violent_rate")
 sns.lmplot(data = calc_data, x = "welfare_povcap", y = "property_rate")
 
+####### Summary Stats #########
+summary_stats = calc_data.describe()
+summary_stats2 = clean_data2.describe()
+
 ###### Regressions #######
 # Perform PooledOLS
 pooled_y=calc_data["justice_rate"]
-pooled_x=calc_data["welfare_povcap"]
+pooled_x=calc_data[["welfare_povcap", "violent_rate", "property_rate"]]
 pooled_x = sm.add_constant(pooled_x)
 pooled_olsr_model = sm.OLS(endog=pooled_y, exog=pooled_x)
 pooled_olsr_model_results = pooled_olsr_model.fit()
 print(pooled_olsr_model_results.summary())
 print('Mean value of residual errors='+str(pooled_olsr_model_results.resid.mean()))
-
-sns.scatterplot(x=GAMI_drop["welfare_povcap"], 
-                y=GAMI_drop["justice_rate"],
-                hue=GAMI_drop["state_initial"],
-                palette="rocket",
-                legend = False)
-plt.show()
 
 sm.qqplot(data=pooled_olsr_model_results.resid, line='45')
 plt.show()
@@ -346,31 +343,65 @@ import statsmodels.graphics.tsaplots as tsap
 tsap.plot_acf(x=pooled_olsr_model_results.resid)
 plt.show()
 
+
+######## USING FULL DATASET ##############
+##### Entity/State - Varied Effects ######
 ## Get dummies ##
 unit_col_name="state_initial"
 time_period_col_name="year"
- 
-#Create the dummy variables, one for each country
-df_dummies = pd.get_dummies(GAMI_drop[unit_col_name])
-df_panel_with_dummies = GAMI_drop.join(df_dummies)
+full_dummies = pd.get_dummies(calc_data[unit_col_name])
+full_panel_with_dummies = calc_data.join(full_dummies)
 
-y_var_name = "justice_rate"
-X_var_names = ["welfare_povcap"]
+## justice_rate ##
+y_name = "justice_rate"
+X_names = ["welfare_povcap", "violent_rate", "property_rate"]
 
-unit_names = GAMI_drop["state_initial"].unique()
+entity_name = calc_data["state_initial"].unique()
 
-# build formula
-lsdv_expr = y_var_name + ' ~ '
+formula = y_name + ' ~ '
 i = 0
-for X_var_name in X_var_names:
+for X_name in X_names:
     if i > 0:
-        lsdv_expr = lsdv_expr + ' + ' + X_var_name
+        formula = formula + ' + ' + X_name
     else:
-        lsdv_expr = lsdv_expr + X_var_name
+        formula = formula + X_name
     i = i + 1
-for dummy_name in unit_names[:-1]:
-    lsdv_expr = lsdv_expr + ' + ' + dummy_name
+for dummy_name in entity_name[:-1]:
+    formula = formula + ' + ' + dummy_name
 
-lsdv_model = smf.ols(formula=lsdv_expr, data=df_panel_with_dummies)
-lsdv_model_results = lsdv_model.fit()
-print(lsdv_model_results.summary())
+full_model = smf.ols(formula=formula, data=full_panel_with_dummies)
+full_model_results = full_model.fit()
+print(full_model_results.summary())
+
+## unemploy_rate ##
+y_name = "unemploy_rate"
+X_names = ["welfare_povcap", "violent_rate", "property_rate"]
+
+entity_name = calc_data["state_initial"].unique()
+
+formula = y_name + ' ~ '
+i = 0
+for X_name in X_names:
+    if i > 0:
+        formula = formula + ' + ' + X_name
+    else:
+        formula = formula + X_name
+    i = i + 1
+for dummy_name in entity_name[:-1]:
+    formula = formula + ' + ' + dummy_name
+
+full_model = smf.ols(formula=formula, data=full_panel_with_dummies)
+full_model_results = full_model.fit()
+print(full_model_results.summary())
+
+### examine VIF ###
+from statsmodels.stats.outliers_influence import variance_inflation_factor
+  
+X = calc_data[["welfare_povcap",'property_rate', 'violent_rate']]
+
+vif_data = pd.DataFrame()
+vif_data["feature"] = X.columns
+vif_data["VIF"] = [variance_inflation_factor(X.values, i)
+                          for i in range(len(X.columns))]
+  
+print(vif_data)
