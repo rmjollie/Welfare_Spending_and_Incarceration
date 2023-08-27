@@ -405,3 +405,4 @@ vif_data["VIF"] = [variance_inflation_factor(X.values, i)
                           for i in range(len(X.columns))]
   
 print(vif_data)
+
